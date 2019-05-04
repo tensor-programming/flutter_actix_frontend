@@ -4,6 +4,7 @@ import 'package:flutter_facebook_login/flutter_facebook_login.dart';
 
 abstract class BaseAuth {
   Stream<String> get onAuthStateChanged;
+  Future<FirebaseUser> get firebaseUser;
   Future<String> signInWithEmailAndPassword(
     String email,
     String password,
@@ -28,6 +29,10 @@ class Auth implements BaseAuth {
   Stream<String> get onAuthStateChanged => _firebaseAuth.onAuthStateChanged.map(
         (FirebaseUser user) => user?.uid,
       );
+
+  @override
+  Future<FirebaseUser> get firebaseUser async =>
+      await _firebaseAuth.currentUser();
 
   @override
   Future<String> createUserWithEmailAndPassword(

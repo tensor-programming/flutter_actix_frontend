@@ -1,4 +1,10 @@
+import 'package:fb_auth_example/repo.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:scoped_model/scoped_model.dart';
+import 'package:intl/intl.dart';
+
+import 'package:fb_auth_example/model.dart';
 
 import 'package:fb_auth_example/provider.dart';
 import 'package:fb_auth_example/auth.dart';
@@ -9,12 +15,15 @@ void main() => runApp(MyApp());
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Provider(
-      auth: Auth(),
-      child: MaterialApp(
-        title: 'Flutter Demo',
-        theme: ThemeData.dark(),
-        home: MyHomePage(),
+    return ScopedModel<MessageModel>(
+      model: MessageModel(),
+      child: Provider(
+        auth: Auth(),
+        child: MaterialApp(
+          title: 'Flutter Demo',
+          theme: ThemeData.dark(),
+          home: MyHomePage(),
+        ),
       ),
     );
   }
@@ -30,7 +39,7 @@ class MyHomePage extends StatelessWidget {
         if (snapshot.connectionState == ConnectionState.active) {
           final bool loggedIn = snapshot.hasData;
           if (loggedIn == true) {
-            return HomePage();
+            return HomePage(auth: auth);
           } else {
             return LoginPage();
           }
@@ -42,28 +51,133 @@ class MyHomePage extends StatelessWidget {
 }
 
 class HomePage extends StatelessWidget {
+  final Auth auth;
+
+  HomePage({this.auth});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+      future: auth.firebaseUser,
+      builder: (context, AsyncSnapshot<FirebaseUser> snapshot) => Scaffold(
+            appBar: AppBar(
+              title: Text('Welcome Page'),
+              actions: <Widget>[
+                FlatButton(
+                  child: Text("Sign Out"),
+                  onPressed: () async {
+                    try {
+                      Auth auth = Provider.of(context).auth;
+                      await auth.signOut();
+                    } catch (e) {
+                      print(e);
+                    }
+                  },
+                )
+              ],
+            ),
+            body: Container(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Welcome ${capitalizeString(snapshot.data?.displayName ?? snapshot.data?.email?.split("@")?.first)}',
+                    ),
+                    Divider(),
+                    MaterialButton(
+                      child: Text('Start Chatting'),
+                      color: Colors.pinkAccent,
+                      onPressed: () async {
+                        ChatRepository repo = ChatRepository();
+                        MessageModel model = ScopedModel.of(context);
+
+                        await model.login(
+                          repo,
+                          Message(
+                            username: capitalizeString(
+                              '${snapshot.data?.displayName ?? snapshot.data?.email?.split("@")?.first}',
+                            ),
+                          ),
+                        );
+
+                        model.setUpMessages(repo);
+
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ChatPage(
+                                  username: capitalizeString(
+                                    '${snapshot.data?.displayName ?? snapshot.data?.email?.split("@")?.first}',
+                                  ),
+                                  repo: repo,
+                                ),
+                          ),
+                        );
+                      },
+                    )
+                  ],
+                ),
+              ),
+            ),
+          ),
+    );
+  }
+}
+
+class ChatPage extends StatelessWidget {
+  final String username;
+  final ChatRepository repo;
+
+  final TextEditingController controller = TextEditingController();
+
+  ChatPage({
+    this.username,
+    this.repo,
+  });
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Welcome Page'),
-        actions: <Widget>[
-          FlatButton(
-            child: Text("Sign Out"),
-            onPressed: () async {
-              try {
-                Auth auth = Provider.of(context).auth;
-                await auth.signOut();
-              } catch (e) {
-                print(e);
-              }
-            },
-          )
-        ],
+        title: Text('Chat Page'),
       ),
-      body: Container(
-        child: Center(
-          child: Text('Welcome'),
+      body: Center(
+        child: Column(
+          children: <Widget>[
+            Expanded(
+              child: ScopedModelDescendant<MessageModel>(
+                rebuildOnChange: true,
+                builder: (context, child, model) => ListView.builder(
+                      reverse: true,
+                      itemCount: model.messages.length,
+                      itemBuilder: (context, index) {
+                        return ListTile(
+                          leading: Text(model.messages[index].username),
+                          title: Text(model.messages[index].body),
+                          subtitle: Text(DateFormat.jms().format(
+                              DateTime.parse(model.messages[index].timestamp))),
+                        );
+                      },
+                    ),
+              ),
+            ),
+            TextFormField(
+              controller: controller,
+              decoration: InputDecoration(
+                labelText: "Send a Message",
+              ),
+              onFieldSubmitted: (String body) {
+                Message message = Message(
+                  username: username,
+                  body: body,
+                );
+
+                repo.postApiMessage(message);
+                controller.clear();
+              },
+            )
+          ],
         ),
       ),
     );
@@ -231,3 +345,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 }
+
+String capitalizeString(String s) =>
+    (s?.isNotEmpty ?? false) ? '${s[0].toUpperCase()}${s.substring(1)}' : s;
