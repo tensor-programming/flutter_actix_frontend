@@ -36,7 +36,10 @@ class MyHomePage extends StatelessWidget {
     return StreamBuilder<String>(
       stream: auth.onAuthStateChanged,
       builder: (context, AsyncSnapshot<String> snapshot) {
-        if (snapshot.connectionState == ConnectionState.active) {
+        if (snapshot.connectionState == ConnectionState.waiting ||
+            snapshot.connectionState == ConnectionState.none) {
+          return Center(child: CircularProgressIndicator());
+        } else {
           final bool loggedIn = snapshot.hasData;
           if (loggedIn == true) {
             return HomePage(auth: auth);
@@ -44,7 +47,6 @@ class MyHomePage extends StatelessWidget {
             return LoginPage();
           }
         }
-        return CircularProgressIndicator();
       },
     );
   }
